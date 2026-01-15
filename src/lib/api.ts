@@ -32,11 +32,11 @@ class ApiClient {
 
   // Metadata endpoints
   async getVariables() {
-    return this.request<{ variables: string[] }>('/api/v1/variables');
+    return this.request<{ variables: string[] }>('/api/v1/metadata/variables');
   }
 
   async getRegions() {
-    return this.request<{ regions: string[] }>('/api/v1/regions');
+    return this.request<{ regions: string[] }>('/api/v1/metadata/regions');
   }
 
   // Data endpoints
@@ -49,7 +49,7 @@ class ApiClient {
       values: number[];
       variable: string;
       region: string;
-    }>(`/api/data/timeseries?${params}`);
+    }>(`/api/v1/data/timeseries?${params}`);
   }
 
   async getAnnualData(variable: string, region: string, startYear?: number, endYear?: number) {
@@ -59,7 +59,7 @@ class ApiClient {
     return this.request<{
       years: number[];
       values: number[];
-    }>(`/api/data/annual?${params}`);
+    }>(`/api/v1/data/annual?${params}`);
   }
 
   async getClimatology(variable: string, region: string, startYear?: number, endYear?: number) {
@@ -70,7 +70,7 @@ class ApiClient {
       months: string[];
       values: number[];
       std: number[];
-    }>(`/api/data/climatology?${params}`);
+    }>(`/api/v1/data/climatology?${params}`);
   }
 
   // Analysis endpoints
@@ -91,7 +91,7 @@ class ApiClient {
         p_value: number;
         tau: number;
       };
-    }>(`/api/analysis/trend?${params}`);
+    }>(`/api/v1/analysis/trend?${params}`);
   }
 
   async getAnomalies(variable: string, region: string, startYear?: number, endYear?: number, threshold?: number) {
@@ -110,7 +110,7 @@ class ApiClient {
         type: 'high' | 'low';
       }>;
       threshold: number;
-    }>(`/api/analysis/anomalies?${params}`);
+    }>(`/api/v1/analysis/anomalies?${params}`);
   }
 
   async getStatistics(variable: string, region: string, startYear?: number, endYear?: number) {
@@ -130,7 +130,7 @@ class ApiClient {
         p75: number;
         p95: number;
       };
-    }>(`/api/analysis/statistics?${params}`);
+    }>(`/api/v1/analysis/statistics?${params}`);
   }
 
   // Forecast endpoints
@@ -144,7 +144,7 @@ class ApiClient {
       upper: number[];
       trend: string;
       change_rate: number;
-    }>(`/api/forecast/prophet?${params}`);
+    }>(`/api/v1/forecast/prophet?${params}`);
   }
 
   async getScenarios(variable: string, region: string, targetYear?: number) {
@@ -180,7 +180,7 @@ class ApiClient {
         color: string;
       };
       baseline: number;
-    }>(`/api/forecast/scenarios?${params}`);
+    }>(`/api/v1/forecast/scenarios?${params}`);
   }
 
   // Impact assessment
@@ -196,7 +196,7 @@ class ApiClient {
         category: string;
       }>;
       sector_vulnerability: Record<string, number>;
-    }>(`/api/impact/assess?${params}`);
+    }>(`/api/v1/impact/assess?${params}`);
   }
 
   // Health check
@@ -207,3 +207,6 @@ class ApiClient {
 
 export const api = new ApiClient(API_BASE_URL);
 export default api;
+
+
+
