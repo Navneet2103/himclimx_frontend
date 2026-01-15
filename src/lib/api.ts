@@ -32,11 +32,11 @@ class ApiClient {
 
   // Metadata endpoints
   async getVariables() {
-    return this.request<{ variables: string[] }>('/api/variables');
+    return this.request<{ variables: string[] }>('/api/v1/variables');
   }
 
   async getRegions() {
-    return this.request<{ regions: string[] }>('/api/regions');
+    return this.request<{ regions: string[] }>('/api/v1/regions');
   }
 
   // Data endpoints
