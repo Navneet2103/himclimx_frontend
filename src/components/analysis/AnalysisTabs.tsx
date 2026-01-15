@@ -322,7 +322,7 @@ function AnomaliesTab({ data, variable, anomalyData }: any) {
       {/* Chart */}
       <Card className="p-6">
         <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
-          🚨 Anomaly Detection (Z-Score > {data.anomalies.threshold})
+          🚨 Anomaly Detection (Z-Score &gt; {data.anomalies.threshold})
         </h3>
         <AnomalyChart
           data={anomalyData}
