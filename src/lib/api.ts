@@ -253,7 +253,7 @@ class ApiClient {
       ssp3?: any;
       ssp5?: any;
       baseline?: number;
-    }>(`/api/v1/scenarios?${params}`);
+    }>(`/api/v1/forecast/scenarios?${params}`);
     
     const defaultScenario = {
       name: 'Unknown',
