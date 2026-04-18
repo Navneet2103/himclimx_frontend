@@ -92,8 +92,8 @@ class ApiClient {
     
     return {
       months: response.data?.months || response.months || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      values: response.data?.mean_values || response.values || [],
-      std: response.data?.std_values || response.std || [],
+      values: response.data?.values || response.values || [],
+      std: response.data?.std || response.std || [],
     };
   }
 
@@ -298,6 +298,30 @@ class ApiClient {
       recommendations: response.impact?.recommendations || response.recommendations || [],
       sector_vulnerability: response.impact?.sector_vulnerability || response.sector_vulnerability || {},
     };
+  }
+
+  // Spatial data for heatmap visualization
+  async getSpatial(variable: string, startYear?: number, endYear?: number) {
+    const params = new URLSearchParams({ variable });
+    if (startYear) params.append('start_year', startYear.toString());
+    if (endYear) params.append('end_year', endYear.toString());
+
+    return this.request<{
+      variable: string;
+      variable_info: { color: string; unit: string; name: string };
+      time_range: { start: string; end: string };
+      regions: Record<string, {
+        value: number | null;
+        name: string;
+        zone: string;
+        elevation_range: string;
+        center: [number, number];
+        color: string;
+        climate_zone: string;
+        vulnerability_index: number;
+      }>;
+      value_range: { min: number | null; max: number | null };
+    }>(`/api/v1/data/spatial?${params}`);
   }
 
   // Health check

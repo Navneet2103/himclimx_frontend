@@ -51,7 +51,7 @@ export function Sidebar() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             onClick={toggleSidebar}
-            className="fixed left-0 top-1/2 -translate-y-1/2 z-50 p-2 bg-white dark:bg-slate-800 rounded-r-lg shadow-lg border border-l-0 border-slate-200 dark:border-slate-700"
+            className="fixed left-0 top-1/2 -translate-y-1/2 mt-8 z-50 p-2 bg-white dark:bg-slate-800 rounded-r-lg shadow-lg border border-l-0 border-slate-200 dark:border-slate-700"
           >
             <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-300" />
           </motion.button>
@@ -66,7 +66,7 @@ export function Sidebar() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -320, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed left-0 top-0 h-screen w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 flex flex-col overflow-hidden"
+            className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="p-4 border-b border-slate-200 dark:border-slate-800">

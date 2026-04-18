@@ -5,13 +5,14 @@ import { motion } from 'framer-motion';
 import { useDashboardStore } from '@/lib/store';
 import { VARIABLES, REGIONS, MONTHS } from '@/lib/constants';
 import { Card, Tabs, Badge, Progress, Spinner, EmptyState } from '@/components/ui';
-import { 
-  TimeSeriesChart, 
-  ClimatologyChart, 
-  AnomalyChart, 
+import {
+  TimeSeriesChart,
+  ClimatologyChart,
+  AnomalyChart,
   ForecastChart,
   ScenarioChart,
-  AnnualChart 
+  AnnualChart,
+  SpatialMap,
 } from './Charts';
 import { StatsGrid, TrendInterpretation } from './StatCards';
 import { formatNumber, formatPercent, getRiskBgColor } from '@/lib/utils';
@@ -22,6 +23,9 @@ const getTabsForOptions = (options: any) => {
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   ];
   
+  if (options.spatial) {
+    tabs.push({ id: 'spatial', label: 'Spatial Map', icon: '🗺️' });
+  }
   if (options.trendAnalysis) {
     tabs.push({ id: 'trends', label: 'Trends', icon: '📈' });
   }
@@ -53,6 +57,11 @@ interface AnalysisTabsProps {
     forecast?: { dates: string[]; values: number[]; lower: number[]; upper: number[]; trend: string };
     scenarios?: { ssp1: any; ssp2: any; ssp3: any; ssp5: any; baseline: number };
     impact?: { risk_level: string; risk_score: number; impact_areas: string[]; recommendations: any[] };
+    spatial?: {
+      variable_info: { color: string; name: string };
+      value_range: { min: number | null; max: number | null };
+      regions: Record<string, { value: number | null; name: string; zone: string; elevation_range: string; climate_zone: string }>;
+    };
   };
   loading?: boolean;
 }
@@ -155,6 +164,10 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
             timeSeriesData={timeSeriesData}
             climatologyData={climatologyData}
           />
+        )}
+
+        {activeTab === 'spatial' && data.spatial && (
+          <SpatialTab data={data} variable={variable} />
         )}
 
         {activeTab === 'trends' && data.trend && (
@@ -358,6 +371,54 @@ function AnomaliesTab({ data, variable, anomalyData }: any) {
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+// Spatial Tab
+function SpatialTab({ data, variable }: any) {
+  return (
+    <div className="space-y-6">
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="font-semibold text-slate-900 dark:text-white">
+            🗺️ Regional Spatial Distribution
+          </h3>
+          <Badge variant="info">{variable?.unit}</Badge>
+        </div>
+        <SpatialMap data={data.spatial} unit={variable?.unit || ''} />
+      </Card>
+
+      {/* Regional breakdown table */}
+      <Card className="p-6">
+        <h4 className="font-medium text-slate-900 dark:text-white mb-4">Region Values</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700">
+                <th className="text-left py-2 pr-4 text-slate-500 dark:text-slate-400 font-medium">Region</th>
+                <th className="text-left py-2 pr-4 text-slate-500 dark:text-slate-400 font-medium">Zone</th>
+                <th className="text-left py-2 pr-4 text-slate-500 dark:text-slate-400 font-medium">Elevation</th>
+                <th className="text-left py-2 pr-4 text-slate-500 dark:text-slate-400 font-medium">Climate Zone</th>
+                <th className="text-right py-2 text-slate-500 dark:text-slate-400 font-medium">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(data.spatial.regions as Record<string, any>).map(([code, region]) => (
+                <tr key={code} className="border-b border-slate-100 dark:border-slate-800">
+                  <td className="py-2 pr-4 font-medium text-slate-900 dark:text-white">{code}</td>
+                  <td className="py-2 pr-4 text-slate-600 dark:text-slate-300">{region.zone}</td>
+                  <td className="py-2 pr-4 text-slate-600 dark:text-slate-300">{region.elevation_range}</td>
+                  <td className="py-2 pr-4 text-slate-600 dark:text-slate-300">{region.climate_zone}</td>
+                  <td className="py-2 text-right font-semibold text-slate-900 dark:text-white">
+                    {region.value != null ? `${formatNumber(region.value, 2)} ${variable?.unit}` : '–'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

@@ -22,8 +22,8 @@ export const useDashboardStore = create<DashboardState>()(
       selectedVariable: 'tmp',
       selectedRegion: 'C4000',
       timePeriod: 'full' as TimePeriod,
-      startYear: 1950,
-      endYear: 2020,
+      startYear: 1901,
+      endYear: 2024,
       analysisOptions: defaultAnalysisOptions,
 
       // UI state

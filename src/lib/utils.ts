@@ -73,8 +73,8 @@ export function getSignificanceBadge(pValue: number): { label: string; color: st
   return { label: 'n.s.', color: 'bg-slate-500/10 text-slate-400' };
 }
 
-export function getYearRange(period: string, datasetEnd: number = 2020): { start: number; end: number } {
-  const datasetStart = 1950;
+export function getYearRange(period: string, datasetEnd: number = 2024): { start: number; end: number } {
+  const datasetStart = 1901;
   
   switch (period) {
     case 'last30':

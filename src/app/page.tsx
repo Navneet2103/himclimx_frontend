@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useDashboardStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import { getYearRange } from '@/lib/utils';
+import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { WelcomeScreen } from '@/components/analysis/WelcomeScreen';
 import { AnalysisTabs } from '@/components/analysis/AnalysisTabs';
@@ -81,6 +82,11 @@ export default function HomePage() {
         dataKeys.push('impact');
       }
 
+      if (analysisOptions.spatial) {
+        promises.push(api.getSpatial(selectedVariable, yearRange.start, yearRange.end));
+        dataKeys.push('spatial');
+      }
+
       // Execute all requests
       const results = await Promise.allSettled(promises);
 
@@ -137,12 +143,15 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      {/* Header */}
+      <Header />
+
       {/* Sidebar */}
       <Sidebar />
 
-      {/* Main Content */}
+      {/* Main Content — pt-16 clears the fixed header (h ≈ 64px) */}
       <main
-        className={`transition-all duration-300 ${
+        className={`transition-all duration-300 pt-16 ${
           sidebarOpen ? 'ml-80' : 'ml-0'
         }`}
       >
@@ -222,6 +231,39 @@ export default function HomePage() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Floating chatbot button */}
+      <a
+        href="https://himalayan-climate-chatbot.vercel.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Explore our RAG-based climate research chatbot"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-full shadow-lg
+                   bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold
+                   hover:from-violet-500 hover:to-indigo-500 hover:shadow-xl hover:-translate-y-0.5
+                   transition-all duration-200 group"
+      >
+        {/* Chat bubble icon */}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5 flex-shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          <path d="M8 10h8M8 14h5" strokeOpacity={0.7} />
+        </svg>
+        <span>Ask the Climate AI</span>
+        {/* Pulsing dot to draw attention */}
+        <span className="absolute -top-1 -right-1 h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-300 opacity-75" />
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-violet-200" />
+        </span>
+      </a>
     </div>
   );
 }

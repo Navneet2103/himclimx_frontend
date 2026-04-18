@@ -358,6 +358,123 @@ export function ScenarioChart({
   );
 }
 
+// Spatial Region Heatmap
+interface SpatialMapProps {
+  data: {
+    variable_info: { color: string; name: string };
+    value_range: { min: number | null; max: number | null };
+    regions: Record<string, {
+      value: number | null;
+      name: string;
+      zone: string;
+      elevation_range: string;
+      climate_zone: string;
+    }>;
+  };
+  unit: string;
+  loading?: boolean;
+}
+
+export function SpatialMap({ data, unit, loading = false }: SpatialMapProps) {
+  if (loading) {
+    return <Skeleton className="w-full h-64" />;
+  }
+
+  const zones = ['W', 'C', 'E'] as const;
+  const zoneLabels = ['Western', 'Central', 'Eastern'];
+  const elevations = ['6000', '4000', '2000'] as const;
+  const elevationLabels = [
+    { main: 'Alpine', sub: '4000m+' },
+    { main: 'Temperate', sub: '2000–4000m' },
+    { main: 'Subtropical', sub: '<2000m' },
+  ];
+
+  const { min, max } = data.value_range;
+  const range = (max ?? 0) - (min ?? 0);
+
+  const getBackground = (value: number | null): string => {
+    if (value === null || min === null || max === null || range === 0) return '#475569';
+    const ratio = Math.max(0, Math.min(1, (value - min) / range));
+    // Blue (low) → Red (high)
+    const r = Math.round(59 + ratio * (239 - 59));
+    const g = Math.round(130 + ratio * (68 - 130));
+    const b = Math.round(246 - ratio * 246);
+    return `rgb(${r},${g},${b})`;
+  };
+
+  const getTextColor = (value: number | null): string => {
+    if (value === null || min === null || max === null || range === 0) return '#e2e8f0';
+    const ratio = (value - min) / range;
+    return ratio > 0.35 ? '#ffffff' : '#1e293b';
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* Column headers */}
+      <div className="grid gap-2" style={{ gridTemplateColumns: '7rem repeat(3, 1fr)' }}>
+        <div />
+        {zoneLabels.map((label) => (
+          <div key={label} className="text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
+            {label}
+          </div>
+        ))}
+      </div>
+
+      {/* Region grid rows */}
+      {elevations.map((elev, rowIdx) => (
+        <div key={elev} className="grid gap-2 items-stretch" style={{ gridTemplateColumns: '7rem repeat(3, 1fr)' }}>
+          {/* Row label */}
+          <div className="flex flex-col justify-center text-right pr-3">
+            <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+              {elevationLabels[rowIdx].main}
+            </span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">
+              {elevationLabels[rowIdx].sub}
+            </span>
+          </div>
+
+          {zones.map((zone) => {
+            const code = `${zone}${elev}`;
+            const region = data.regions[code];
+            const bg = getBackground(region?.value ?? null);
+            const fg = getTextColor(region?.value ?? null);
+
+            return (
+              <div
+                key={code}
+                className="rounded-xl p-3 text-center transition-transform duration-200 hover:scale-105 cursor-default select-none"
+                style={{ backgroundColor: bg, color: fg }}
+                title={`${region?.name ?? code}: ${region?.value != null ? `${formatNumber(region.value, 2)} ${unit}` : 'No data'}`}
+              >
+                <div className="text-xs font-bold opacity-80">{code}</div>
+                <div className="text-xl font-bold leading-tight mt-1">
+                  {region?.value != null ? formatNumber(region.value, 1) : '–'}
+                </div>
+                <div className="text-xs opacity-70">{unit}</div>
+                <div className="text-xs opacity-60 mt-1 truncate">{region?.climate_zone ?? ''}</div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Colour scale */}
+      <div className="flex items-center gap-3 pt-3">
+        <span className="text-xs text-slate-500 dark:text-slate-400 w-16 text-right">
+          {min != null ? `${formatNumber(min, 1)} ${unit}` : '–'}
+        </span>
+        <div
+          className="flex-1 h-3 rounded-full"
+          style={{ background: 'linear-gradient(to right, rgb(59,130,246), rgb(239,68,68))' }}
+        />
+        <span className="text-xs text-slate-500 dark:text-slate-400 w-16">
+          {max != null ? `${formatNumber(max, 1)} ${unit}` : '–'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // Annual Trend Chart
 interface AnnualChartProps {
   data: { year: number; value: number }[];
