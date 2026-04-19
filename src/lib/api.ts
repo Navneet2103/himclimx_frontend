@@ -92,8 +92,8 @@ class ApiClient {
     
     return {
       months: response.data?.months || response.months || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      values: response.data?.values || response.values || [],
-      std: response.data?.std || response.std || [],
+      values: response.data?.mean_values || response.values || [],
+      std: response.data?.std_values || response.std || [],
     };
   }
 
