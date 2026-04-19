@@ -50,7 +50,7 @@ const features = [
 const stats = [
   { label: 'Climate Variables', value: '10', icon: Thermometer },
   { label: 'Elevation Zones', value: '9', icon: Mountain },
-  { label: 'Years of Data', value: '70+', icon: BarChart3 },
+  { label: 'Years of Data', value: '124+', icon: BarChart3 },
   { label: 'Analysis Types', value: '8', icon: TrendingUp },
 ];
 

@@ -66,7 +66,7 @@ export function Sidebar() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -320, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 flex flex-col overflow-hidden"
+            className="fixed left-0 top-0 h-screen w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="p-4 border-b border-slate-200 dark:border-slate-800">
@@ -248,8 +248,8 @@ export function Sidebar() {
                         </label>
                         <input
                           type="number"
-                          min={1950}
-                          max={2020}
+                          min={1901}
+                          max={2024}
                           value={startYear}
                           onChange={(e) => setStartYear(parseInt(e.target.value))}
                           className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-sm"
@@ -261,8 +261,8 @@ export function Sidebar() {
                         </label>
                         <input
                           type="number"
-                          min={1950}
-                          max={2020}
+                          min={1901}
+                          max={2024}
                           value={endYear}
                           onChange={(e) => setEndYear(parseInt(e.target.value))}
                           className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-sm"

@@ -116,7 +116,7 @@ export const VARIABLES: Record<string, VariableInfo> = {
 export const REGIONS: Record<string, RegionInfo> = {
   E2000: {
     code: 'E2000',
-    name: 'Eastern Valleys',
+    name: 'Eastern Valley',
     range: '0-2000m',
     icon: '🏞️',
     color: '#FF6B6B',
@@ -152,7 +152,7 @@ export const REGIONS: Record<string, RegionInfo> = {
   },
   C2000: {
     code: 'C2000',
-    name: 'Central Valleys',
+    name: 'Central Valley',
     range: '0-2000m',
     icon: '🏞️',
     color: '#4CAF50',
@@ -188,7 +188,7 @@ export const REGIONS: Record<string, RegionInfo> = {
   },
   W2000: {
     code: 'W2000',
-    name: 'Western Valleys',
+    name: 'Western Valley',
     range: '0-2000m',
     icon: '🏞️',
     color: '#2196F3',

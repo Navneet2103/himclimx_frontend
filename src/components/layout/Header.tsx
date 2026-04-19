@@ -8,9 +8,7 @@ export function Header() {
 
   return (
     <header
-      className={`fixed top-0 right-0 z-30 transition-all duration-300 ${
-        sidebarOpen ? 'left-80' : 'left-0'
-      } bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50`}
+      className="fixed top-0 left-0 right-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50"
     >
       <div className="flex items-center gap-4 px-6 py-3">
         {/* BIT Mesra Logo */}
