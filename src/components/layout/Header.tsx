@@ -8,16 +8,16 @@ export function Header() {
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50"
+      className="fixed top-0 left-0 right-0 z-30 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50"
     >
-      <div className="flex items-center gap-4 px-6 py-3">
+      <div className="flex items-center gap-4 px-6 h-full">
         {/* BIT Mesra Logo */}
         <div className="flex-shrink-0">
           <Image
             src="/bit-mesra-logo.png"
             alt="Birla Institute of Technology, Mesra"
-            width={52}
-            height={52}
+            width={40}
+            height={40}
             className="rounded-full object-contain"
             priority
           />
