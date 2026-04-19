@@ -186,7 +186,7 @@ export function Sidebar() {
                     onChange={(e) => setSelectedRegion(e.target.value)}
                     options={Object.values(REGIONS).map((r) => ({
                       value: r.code,
-                      label: `${r.icon} ${r.name}`,
+                      label: `${r.icon} ${r.name} : ${r.code}`,
                     }))}
                   />
 
