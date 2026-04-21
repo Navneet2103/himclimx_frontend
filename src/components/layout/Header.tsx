@@ -27,11 +27,11 @@ export function Header() {
             className="rounded-full object-contain flex-shrink-0"
             priority
           />
-          <div className="hidden sm:block">
+          <div className="hidden sm:block text-center">
             <p className="text-xs font-semibold uppercase tracking-widest text-red-600 dark:text-red-400 leading-none">
               Birla Institute of Technology, Mesra
             </p>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-200 mt-0.5">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5 tracking-widest uppercase">
               A Climate Research Initiative
             </p>
           </div>

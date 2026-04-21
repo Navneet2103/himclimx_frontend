@@ -387,14 +387,38 @@ export function WelcomeScreen() {
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-6 text-center">
             Key Features
           </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => (
+          {/* Top row: 3 features */}
+          <div className="grid md:grid-cols-3 gap-6 mb-6">
+            {features.slice(0, 3).map((feature, index) => (
               <motion.div
                 key={feature.title}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: 0.08 * index }}
+              >
+                <Card className="p-6 h-full">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+                    style={{ backgroundColor: `${feature.color}18` }}
+                  >
+                    <feature.icon className="w-6 h-6" style={{ color: feature.color }} />
+                  </div>
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-2">{feature.title}</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{feature.description}</p>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+          {/* Bottom row: 2 features centered */}
+          <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto w-full">
+            {features.slice(3).map((feature, index) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.08 * (index + 3) }}
               >
                 <Card className="p-6 h-full">
                   <div
@@ -421,7 +445,10 @@ export function WelcomeScreen() {
           <p className="mb-1">HimClimX — Himalayas Climate Explorer</p>
           <p>Applied Data Science Lab, Centre For Quantitative Economics and Data Science</p>
           <p>Birla Institute of Technology, Mesra</p>
-          <p className="mt-2">© 2024 Himalayan Climate Research Initiative</p>
+          <p className="mt-2 text-slate-400 dark:text-slate-500">
+            Managed by Navneet Kumar, Neeraj Maurya &amp; Dr. Manish Kumar Pandey
+          </p>
+          <p className="mt-1">© 2024 Himalayan Climate Research Initiative</p>
         </motion.footer>
       </div>
     </div>
