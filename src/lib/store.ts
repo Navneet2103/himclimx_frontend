@@ -30,7 +30,7 @@ export const useDashboardStore = create<DashboardState>()(
       isAnalyzing: false,
       analysisResult: null,
       activeTab: 'dashboard',
-      sidebarOpen: true,
+      sidebarOpen: false,
       theme: 'dark' as const,
 
       // Actions
@@ -61,7 +61,6 @@ export const useDashboardStore = create<DashboardState>()(
         endYear: state.endYear,
         analysisOptions: state.analysisOptions,
         theme: state.theme,
-        sidebarOpen: state.sidebarOpen,
       }),
     }
   )
