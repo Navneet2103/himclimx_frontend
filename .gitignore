@@ -1,0 +1,34 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next.js build output
+/.next/
+/out/
+
+# production build
+/build
+
+# local env files — never commit these; set real values in Vercel dashboard
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# typescript incremental build
+*.tsbuildinfo
+next-env.d.ts
+
+# misc
+.DS_Store
+*.pem
+.vercel
+.idea

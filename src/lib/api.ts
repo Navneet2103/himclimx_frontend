@@ -310,6 +310,11 @@ class ApiClient {
       variable: string;
       variable_info: { color: string; unit: string; name: string };
       time_range: { start: string; end: string };
+      gridded: {
+        lats: number[];
+        lons: number[];
+        values: (number | null)[][];
+      };
       regions: Record<string, {
         value: number | null;
         name: string;

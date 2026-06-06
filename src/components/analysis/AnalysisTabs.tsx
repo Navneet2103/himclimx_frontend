@@ -14,6 +14,7 @@ import {
   AnnualChart,
   SpatialMap,
 } from './Charts';
+import { SatelliteHeatmap } from './SatelliteHeatmap';
 import { StatsGrid, TrendInterpretation } from './StatCards';
 import { formatNumber, formatPercent, getRiskBgColor } from '@/lib/utils';
 
@@ -60,6 +61,8 @@ interface AnalysisTabsProps {
     spatial?: {
       variable_info: { color: string; name: string };
       value_range: { min: number | null; max: number | null };
+      time_range?: { start: string | null; end: string | null };
+      gridded?: { lats: number[]; lons: number[]; values: (number | null)[][] };
       regions: Record<string, { value: number | null; name: string; zone: string; elevation_range: string; climate_zone: string }>;
     };
   };
@@ -167,7 +170,7 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
         )}
 
         {activeTab === 'spatial' && data.spatial && (
-          <SpatialTab data={data} variable={variable} />
+          <SpatialTab data={data} variable={variable} selectedRegion={selectedRegion} />
         )}
 
         {activeTab === 'trends' && data.trend && (
@@ -376,22 +379,52 @@ function AnomaliesTab({ data, variable, anomalyData }: any) {
 }
 
 // Spatial Tab
-function SpatialTab({ data, variable }: any) {
+function SpatialTab({ data, variable, selectedRegion }: any) {
+  const hasGridded = data.spatial?.gridded?.lats?.length > 0;
+
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="font-semibold text-slate-900 dark:text-white">
-            🗺️ Regional Spatial Distribution
-          </h3>
-          <Badge variant="info">{variable?.unit}</Badge>
-        </div>
-        <SpatialMap data={data.spatial} unit={variable?.unit || ''} />
-      </Card>
+      {/* Real gridded heatmap */}
+      {hasGridded && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              🗺️ Gridded Climate Map (CRU 0.5° Resolution)
+            </h3>
+            <Badge variant="info">{variable?.unit}</Badge>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+            CRU gridded data overlaid on ESRI satellite imagery. White dashed boxes = study regions; gold box = selected region. Hover a cell for coordinates and value.
+          </p>
+          <SatelliteHeatmap
+            lats={data.spatial.gridded.lats}
+            lons={data.spatial.gridded.lons}
+            values={data.spatial.gridded.values}
+            unit={variable?.unit || ''}
+            variableName={variable?.name}
+            selectedRegion={selectedRegion}
+            regions={data.spatial.regions}
+            timeRange={data.spatial.time_range as any}
+          />
+        </Card>
+      )}
+
+      {/* Fallback 9-box summary if no gridded data */}
+      {!hasGridded && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              🗺️ Regional Summary
+            </h3>
+            <Badge variant="info">{variable?.unit}</Badge>
+          </div>
+          <SpatialMap data={data.spatial} unit={variable?.unit || ''} />
+        </Card>
+      )}
 
       {/* Regional breakdown table */}
       <Card className="p-6">
-        <h4 className="font-medium text-slate-900 dark:text-white mb-4">Region Values</h4>
+        <h4 className="font-medium text-slate-900 dark:text-white mb-4">Region Time-Mean Values</h4>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -400,13 +433,19 @@ function SpatialTab({ data, variable }: any) {
                 <th className="text-left py-2 pr-4 text-slate-500 dark:text-slate-400 font-medium">Zone</th>
                 <th className="text-left py-2 pr-4 text-slate-500 dark:text-slate-400 font-medium">Elevation</th>
                 <th className="text-left py-2 pr-4 text-slate-500 dark:text-slate-400 font-medium">Climate Zone</th>
-                <th className="text-right py-2 text-slate-500 dark:text-slate-400 font-medium">Value</th>
+                <th className="text-right py-2 text-slate-500 dark:text-slate-400 font-medium">Mean Value</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(data.spatial.regions as Record<string, any>).map(([code, region]) => (
-                <tr key={code} className="border-b border-slate-100 dark:border-slate-800">
-                  <td className="py-2 pr-4 font-medium text-slate-900 dark:text-white">{code}</td>
+                <tr
+                  key={code}
+                  className={`border-b border-slate-100 dark:border-slate-800 ${code === selectedRegion ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}
+                >
+                  <td className="py-2 pr-4 font-medium text-slate-900 dark:text-white">
+                    {code}
+                    {code === selectedRegion && <span className="ml-2 text-amber-500 text-xs">★ selected</span>}
+                  </td>
                   <td className="py-2 pr-4 text-slate-600 dark:text-slate-300">{region.zone}</td>
                   <td className="py-2 pr-4 text-slate-600 dark:text-slate-300">{region.elevation_range}</td>
                   <td className="py-2 pr-4 text-slate-600 dark:text-slate-300">{region.climate_zone}</td>

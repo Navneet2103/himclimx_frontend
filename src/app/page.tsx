@@ -234,7 +234,7 @@ export default function HomePage() {
 
       {/* Floating chatbot button */}
       <a
-        href="https://himalayan-climate-chatbot.vercel.app/"
+        href="https://himalai-frontend.vercel.app/"
         target="_blank"
         rel="noopener noreferrer"
         title="Explore our RAG-based climate research chatbot"
