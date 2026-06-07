@@ -84,16 +84,16 @@ class ApiClient {
     if (endYear) params.append('end_year', endYear.toString());
     
     const response = await this.request<{
-      data?: { months: string[]; mean_values: number[]; std_values: number[] };
+      data?: { months: string[]; values: number[]; std: number[]; mean_values?: number[]; std_values?: number[] };
       months?: string[];
       values?: number[];
       std?: number[];
     }>(`/api/v1/data/climatology?${params}`);
-    
+
     return {
       months: response.data?.months || response.months || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      values: response.data?.mean_values || response.values || [],
-      std: response.data?.std_values || response.std || [],
+      values: response.data?.values || response.data?.mean_values || response.values || [],
+      std:    response.data?.std    || response.data?.std_values  || response.std    || [],
     };
   }
 

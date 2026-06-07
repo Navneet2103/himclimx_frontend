@@ -4,7 +4,7 @@ import { DashboardState, AnalysisOptions, TimePeriod, AnalysisResult } from '@/t
 
 const defaultAnalysisOptions: AnalysisOptions = {
   timeSeries: true,
-  spatial: false,
+  spatial: true,
   terrain3D: false,
   anomalyDetection: false,
   trendAnalysis: true,
