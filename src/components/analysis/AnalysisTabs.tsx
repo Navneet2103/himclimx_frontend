@@ -958,7 +958,6 @@ function ImpactTab({ data, variable, region }: any) {
 
 // Report Tab — AI-powered via OpenAI + PDF download via jsPDF
 function ReportTab({ data, variable, region, startYear, endYear }: any) {
-  const [apiKey, setApiKey] = useState('');
   const [report, setReport] = useState<Record<string, any> | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -971,7 +970,7 @@ function ReportTab({ data, variable, region, startYear, endYear }: any) {
       const res = await fetch('/api/generate-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data, variable, region, startYear, endYear, apiKey: apiKey || undefined }),
+        body: JSON.stringify({ data, variable, region, startYear, endYear }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Report generation failed');
@@ -1133,41 +1132,35 @@ function ReportTab({ data, variable, region, startYear, endYear }: any) {
     <div className="space-y-6">
       {/* Controls */}
       <Card className="p-6">
-        <h3 className="font-semibold text-slate-900 dark:text-white mb-1">📄 AI-Generated Climate Report</h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
-          Uses OpenAI to synthesise all analysis results into a professional, citable report.
-          Set <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">OPENAI_API_KEY</code> in
-          Vercel environment variables, or paste your key below (not stored).
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <input
-            type="password"
-            placeholder="sk-… (OpenAI API key — if not set in env)"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            className="flex-1 px-3 py-2 text-sm bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            onClick={generateReport}
-            disabled={generating}
-            className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shrink-0"
-          >
-            {generating ? (
-              <>
-                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Generating…
-              </>
-            ) : '✨ Generate AI Report'}
-          </button>
-          {report && (
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div>
+            <h3 className="font-semibold text-slate-900 dark:text-white">📄 AI-Generated Climate Report</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Synthesises all analysis results into a professional, citable report using AI.
+            </p>
+          </div>
+          <div className="flex gap-3">
             <button
-              onClick={downloadPDF}
-              className="px-5 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shrink-0"
+              onClick={generateReport}
+              disabled={generating}
+              className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
-              ⬇ Download PDF
+              {generating ? (
+                <>
+                  <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Generating…
+                </>
+              ) : '✨ Generate Report'}
             </button>
-          )}
+            {report && (
+              <button
+                onClick={downloadPDF}
+                className="px-5 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+              >
+                ⬇ Download PDF
+              </button>
+            )}
+          </div>
         </div>
 
         {error && (

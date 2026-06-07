@@ -130,13 +130,13 @@ function buildPrompt(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { data, variable, region, startYear, endYear, apiKey } = body;
+    const { data, variable, region, startYear, endYear } = body;
 
-    const key = (apiKey as string | undefined) || process.env.OPENAI_API_KEY;
+    const key = process.env.OPENAI_API_KEY;
     if (!key) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured. Set OPENAI_API_KEY env var or pass it in the request.' },
-        { status: 400 }
+        { error: 'Report generation is not configured. Contact the administrator.' },
+        { status: 503 }
       );
     }
 
