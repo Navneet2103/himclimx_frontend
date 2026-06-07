@@ -65,6 +65,28 @@ export function TimeSeriesChart({
   const hasTrend = showTrend && data.some(d => d.trend !== undefined);
   const hasMovingAvg = showMovingAvg && data.some(d => d.movingAvg !== undefined);
 
+  // Smart Y-axis domain: avoid forcing 0 as minimum so data doesn't look squished.
+  // Compute actual data extent and add 8% padding (floor at 0 only if all values are ≥ 0).
+  const allNums = data.flatMap(d => [
+    d.value,
+    d.trend,
+    (d as any).movingAvg,
+  ]).filter((v): v is number => v !== undefined && v !== null && !isNaN(v));
+
+  let yDomain: [number, number] = [0, 1];
+  if (allNums.length > 0) {
+    const lo = Math.min(...allNums);
+    const hi = Math.max(...allNums);
+    const range = hi - lo || 1;
+    const pad = Math.max(range * 0.08, 0.3);
+    // Only clamp lower bound to 0 when all values are non-negative (e.g. precipitation)
+    const bottom = lo >= 0 ? Math.max(0, lo - pad) : lo - pad;
+    yDomain = [
+      parseFloat(bottom.toFixed(2)),
+      parseFloat((hi + pad).toFixed(2)),
+    ];
+  }
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -77,6 +99,7 @@ export function TimeSeriesChart({
           axisLine={false}
         />
         <YAxis
+          domain={yDomain}
           stroke="#64748b"
           fontSize={12}
           tickLine={false}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useDashboardStore } from '@/lib/store';
 import { VARIABLES, REGIONS, MONTHS } from '@/lib/constants';
@@ -264,7 +264,7 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
         )}
 
         {activeTab === 'report' && (
-          <ReportTab data={data} variable={variable} region={region} startYear={startYear} endYear={endYear} />
+          <ReportTab data={data} variable={variable} region={region} startYear={displayStartYear} endYear={displayEndYear} />
         )}
       </motion.div>
     </div>
@@ -956,65 +956,372 @@ function ImpactTab({ data, variable, region }: any) {
   );
 }
 
-// Report Tab
+// Report Tab — AI-powered via OpenAI + PDF download via jsPDF
 function ReportTab({ data, variable, region, startYear, endYear }: any) {
-  const generateReport = () => {
-    let report = `# Climate Analysis Report\n\n`;
-    report += `**Generated:** ${new Date().toLocaleString()}\n`;
-    report += `**Variable:** ${variable.name} (${variable.unit})\n`;
-    report += `**Region:** ${region.name} (${region.range})\n`;
-    report += `**Time Period:** ${startYear} - ${endYear}\n\n`;
+  const [apiKey, setApiKey] = useState('');
+  const [report, setReport] = useState<Record<string, any> | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
+  const generateReport = useCallback(async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data, variable, region, startYear, endYear, apiKey: apiKey || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Report generation failed');
+      setReport(json.report);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  }, [data, variable, region, startYear, endYear, apiKey]);
+
+  const downloadPDF = useCallback(async () => {
+    if (!report) return;
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 18;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const checkPage = (needed = 10) => {
+      if (y + needed > pageH - margin) { doc.addPage(); y = margin; }
+    };
+
+    const addText = (text: string, fontSize: number, bold = false, color: [number,number,number] = [30,41,59]) => {
+      doc.setFontSize(fontSize);
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setTextColor(...color);
+      const lines = doc.splitTextToSize(text, contentW);
+      checkPage(lines.length * fontSize * 0.4 + 4);
+      doc.text(lines, margin, y);
+      y += lines.length * fontSize * 0.4 + 2;
+    };
+
+    const addSection = (title: string, body: string) => {
+      y += 4;
+      checkPage(20);
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin - 2, y - 4, contentW + 4, 8, 'F');
+      addText(title, 12, true, [30, 64, 175]);
+      y += 1;
+      addText(body, 10, false, [51, 65, 85]);
+      y += 2;
+    };
+
+    // --- Title block ---
+    doc.setFillColor(30, 64, 175);
+    doc.rect(0, 0, pageW, 28, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(255, 255, 255);
+    const title = report.title ?? `Climate Analysis Report: ${variable?.name} — ${region?.name}`;
+    const titleLines = doc.splitTextToSize(title, contentW);
+    doc.text(titleLines, margin, 11);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`${startYear}–${endYear}  ·  Generated ${new Date().toLocaleDateString()}`, margin, 23);
+    y = 36;
+
+    // --- Institution ---
+    addText('Birla Institute of Technology, Mesra — A Climate Research Initiative', 9, false, [100, 116, 139]);
+    y += 3;
+
+    // --- Executive Summary ---
+    if (report.executive_summary) addSection('Executive Summary', report.executive_summary);
+
+    // --- Key Findings ---
+    if (report.key_findings?.length) {
+      y += 4; checkPage(20);
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin - 2, y - 4, contentW + 4, 8, 'F');
+      addText('Key Findings', 12, true, [30, 64, 175]);
+      y += 1;
+      (report.key_findings as string[]).forEach((f, i) => {
+        const lines = doc.splitTextToSize(`${i + 1}. ${f}`, contentW - 4);
+        checkPage(lines.length * 4.5 + 2);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(51, 65, 85);
+        doc.text(lines, margin + 2, y);
+        y += lines.length * 4.2 + 1.5;
+      });
+    }
+
+    // --- Stats table ---
     if (data.statistics) {
-      report += `## Key Statistics\n\n`;
-      report += `| Metric | Value |\n|--------|-------|\n`;
-      report += `| Mean | ${formatNumber(data.statistics.mean)} ${variable.unit} |\n`;
-      report += `| Median | ${formatNumber(data.statistics.median)} ${variable.unit} |\n`;
-      report += `| Min | ${formatNumber(data.statistics.min)} ${variable.unit} |\n`;
-      report += `| Max | ${formatNumber(data.statistics.max)} ${variable.unit} |\n`;
-      report += `| Std Dev | ${formatNumber(data.statistics.std)} ${variable.unit} |\n\n`;
+      y += 4; checkPage(30);
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin - 2, y - 4, contentW + 4, 8, 'F');
+      addText('Descriptive Statistics', 12, true, [30, 64, 175]);
+      y += 1;
+      const stats = [
+        ['Mean', `${formatNumber(data.statistics.mean, 3)} ${variable?.unit}`],
+        ['Median', `${formatNumber(data.statistics.median, 3)} ${variable?.unit}`],
+        ['Min', `${formatNumber(data.statistics.min, 3)} ${variable?.unit}`],
+        ['Max', `${formatNumber(data.statistics.max, 3)} ${variable?.unit}`],
+        ['Std Dev', `${formatNumber(data.statistics.std, 4)} ${variable?.unit}`],
+        ['Count', `${data.statistics.count} months`],
+      ];
+      const colW = contentW / 2 - 4;
+      stats.forEach(([label, value], i) => {
+        if (i % 2 === 0) { if (i > 0) y += 5; checkPage(6); }
+        const col = i % 2 === 0 ? margin : margin + colW + 8;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(71, 85, 105);
+        doc.text(label + ':', col, y);
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(15, 23, 42);
+        doc.text(value, col + 22, y);
+        if (i % 2 === 1) y += 5;
+      });
+      y += 4;
     }
 
-    if (data.trend) {
-      report += `## Trend Analysis\n\n`;
-      report += `- Trend per decade: ${formatNumber(data.trend.per_decade, 3)} ${variable.unit}\n`;
-      report += `- Percent change: ${formatPercent(data.trend.percent_change)}\n`;
-      report += `- R-squared: ${formatNumber(data.trend.r_squared, 3)}\n`;
-      report += `- P-value: ${data.trend.p_value.toExponential(2)}\n\n`;
+    // --- Remaining narrative sections ---
+    const sections: [string, string][] = [
+      ['Observed Climate', report.observed_climate],
+      ['Trend Analysis', report.trend_analysis],
+      ['Forecast Outlook', report.forecast_outlook],
+      ['Climate Scenario Analysis', report.scenario_analysis],
+      ['Impact Assessment', report.impact_assessment],
+    ];
+    sections.forEach(([title, body]) => { if (body) addSection(title, body); });
+
+    // --- Recommendations ---
+    if (report.recommendations?.length) {
+      y += 4; checkPage(20);
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin - 2, y - 4, contentW + 4, 8, 'F');
+      addText('Recommendations', 12, true, [30, 64, 175]);
+      y += 1;
+      (report.recommendations as string[]).forEach((r, i) => {
+        const lines = doc.splitTextToSize(`• ${r}`, contentW - 4);
+        checkPage(lines.length * 4.5 + 2);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(51, 65, 85);
+        doc.text(lines, margin + 2, y);
+        y += lines.length * 4.2 + 2;
+      });
     }
 
-    return report;
-  };
+    // --- Notes + Conclusion ---
+    if (report.methodology_note) addSection('Methodology Note', report.methodology_note);
+    if (report.data_quality_note) addSection('Data Quality', report.data_quality_note);
+    if (report.conclusion) addSection('Conclusion', report.conclusion);
 
-  const downloadReport = () => {
-    const report = generateReport();
-    const blob = new Blob([report], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `climate_report_${variable.code}_${region.code}.md`;
-    a.click();
-  };
+    // --- Footer on all pages ---
+    const totalPages = (doc.internal as any).getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(148, 163, 184);
+      doc.text(
+        `HimClimX — ${variable?.name} · ${region?.name} · ${startYear}–${endYear}`,
+        margin, pageH - 8
+      );
+      doc.text(`Page ${i} of ${totalPages}`, pageW - margin, pageH - 8, { align: 'right' });
+    }
+
+    doc.save(`HimClimX_${variable?.code ?? 'report'}_${region?.code ?? 'region'}_${startYear}-${endYear}.pdf`);
+  }, [report, variable, region, startYear, endYear, data]);
 
   return (
-    <Card className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="font-semibold text-slate-900 dark:text-white">
-          📄 Analysis Report
-        </h3>
-        <button
-          onClick={downloadReport}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          Download Report
-        </button>
-      </div>
+    <div className="space-y-6">
+      {/* Controls */}
+      <Card className="p-6">
+        <h3 className="font-semibold text-slate-900 dark:text-white mb-1">📄 AI-Generated Climate Report</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+          Uses OpenAI to synthesise all analysis results into a professional, citable report.
+          Set <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">OPENAI_API_KEY</code> in
+          Vercel environment variables, or paste your key below (not stored).
+        </p>
 
-      <div className="prose dark:prose-invert max-w-none">
-        <pre className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-sm overflow-x-auto">
-          {generateReport()}
-        </pre>
-      </div>
-    </Card>
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <input
+            type="password"
+            placeholder="sk-… (OpenAI API key — if not set in env)"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            className="flex-1 px-3 py-2 text-sm bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={generateReport}
+            disabled={generating}
+            className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shrink-0"
+          >
+            {generating ? (
+              <>
+                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Generating…
+              </>
+            ) : '✨ Generate AI Report'}
+          </button>
+          {report && (
+            <button
+              onClick={downloadPDF}
+              className="px-5 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shrink-0"
+            >
+              ⬇ Download PDF
+            </button>
+          )}
+        </div>
+
+        {error && (
+          <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800/50 rounded-lg text-sm text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        )}
+      </Card>
+
+      {/* Report Preview */}
+      {report && (
+        <div ref={previewRef} className="space-y-5">
+          {/* Title banner */}
+          <div className="rounded-xl p-6 bg-gradient-to-r from-blue-700 to-blue-900 text-white">
+            <h2 className="text-xl font-bold leading-tight mb-1">
+              {report.title ?? `${variable?.name} Analysis — ${region?.name}`}
+            </h2>
+            <p className="text-blue-200 text-sm">
+              {region?.climateZone} · {region?.range} elevation · {startYear}–{endYear} ·{' '}
+              Generated {new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}
+            </p>
+            <p className="text-blue-300 text-xs mt-1">
+              Birla Institute of Technology, Mesra — A Climate Research Initiative
+            </p>
+          </div>
+
+          {/* Executive Summary */}
+          {report.executive_summary && (
+            <Card className="p-6">
+              <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                <span className="w-1 h-5 bg-blue-600 rounded-full" />
+                Executive Summary
+              </h4>
+              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{report.executive_summary}</p>
+            </Card>
+          )}
+
+          {/* Key Findings */}
+          {report.key_findings?.length > 0 && (
+            <Card className="p-6">
+              <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <span className="w-1 h-5 bg-amber-500 rounded-full" />
+                Key Findings
+              </h4>
+              <ol className="space-y-2.5">
+                {(report.key_findings as string[]).map((f, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-xs font-bold flex items-center justify-center">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{f}</span>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          )}
+
+          {/* Data table inline */}
+          {data.statistics && (
+            <Card className="p-6">
+              <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <span className="w-1 h-5 bg-slate-400 rounded-full" />
+                Descriptive Statistics
+              </h4>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                {[
+                  ['Mean',    formatNumber(data.statistics.mean,   3)],
+                  ['Median',  formatNumber(data.statistics.median, 3)],
+                  ['Min',     formatNumber(data.statistics.min,    3)],
+                  ['Max',     formatNumber(data.statistics.max,    3)],
+                  ['Std Dev', formatNumber(data.statistics.std,    4)],
+                  ['Count',   `${data.statistics.count} mo.`],
+                ].map(([label, value]) => (
+                  <div key={label} className="text-center p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg">
+                    <p className="text-lg font-bold text-slate-900 dark:text-white">{value}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
+                    {label !== 'Count' && <p className="text-xs text-slate-400">{variable?.unit}</p>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Narrative sections */}
+          {([
+            ['🌡️ Observed Climate',          'observed_climate',    'blue'],
+            ['📈 Trend Analysis',             'trend_analysis',      'red'],
+            ['🔮 Forecast Outlook',           'forecast_outlook',    'violet'],
+            ['🌍 Climate Scenario Analysis',  'scenario_analysis',   'amber'],
+            ['⚠️ Impact Assessment',          'impact_assessment',   'orange'],
+          ] as [string, string, string][]).map(([title, key, accent]) =>
+            report[key] ? (
+              <Card key={key} className="p-6">
+                <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                  <span className={`w-1 h-5 bg-${accent}-500 rounded-full`} />
+                  {title}
+                </h4>
+                <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{report[key]}</p>
+              </Card>
+            ) : null
+          )}
+
+          {/* Recommendations */}
+          {report.recommendations?.length > 0 && (
+            <Card className="p-6">
+              <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <span className="w-1 h-5 bg-emerald-500 rounded-full" />
+                Recommendations
+              </h4>
+              <ul className="space-y-2.5">
+                {(report.recommendations as string[]).map((r, i) => (
+                  <li key={i} className="flex gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 rounded-lg">
+                    <span className="text-emerald-500 font-bold flex-shrink-0">→</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {/* Footer notes */}
+          {(report.methodology_note || report.data_quality_note || report.conclusion) && (
+            <Card className="p-6 bg-slate-50 dark:bg-slate-800/50">
+              {report.conclusion && (
+                <>
+                  <h4 className="font-bold text-slate-900 dark:text-white mb-2">Conclusion</h4>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-4">{report.conclusion}</p>
+                </>
+              )}
+              {report.methodology_note && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                  <strong>Methodology:</strong> {report.methodology_note}
+                </p>
+              )}
+              {report.data_quality_note && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <strong>Data:</strong> {report.data_quality_note}
+                </p>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Placeholder when no report yet */}
+      {!report && !generating && (
+        <Card className="p-12 text-center">
+          <span className="text-5xl block mb-4">📊</span>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">
+            Click <strong>Generate AI Report</strong> to create a contextual analysis.
+            <br />All charts and statistics from this session will be used as source material.
+          </p>
+        </Card>
+      )}
+    </div>
   );
 }
