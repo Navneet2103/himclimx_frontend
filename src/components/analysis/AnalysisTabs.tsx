@@ -980,7 +980,7 @@ function ReportTab({ data, variable, region, startYear, endYear }: any) {
     } finally {
       setGenerating(false);
     }
-  }, [data, variable, region, startYear, endYear, apiKey]);
+  }, [data, variable, region, startYear, endYear]);
 
   const downloadPDF = useCallback(async () => {
     if (!report) return;
