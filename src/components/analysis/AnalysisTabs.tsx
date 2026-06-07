@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useDashboardStore } from '@/lib/store';
 import { VARIABLES, REGIONS, MONTHS } from '@/lib/constants';
-import { Card, Tabs, Badge, Progress, Spinner, EmptyState } from '@/components/ui';
+import { Card, Tabs, Badge, Spinner, EmptyState } from '@/components/ui';
 import {
   TimeSeriesChart,
   ClimatologyChart,
@@ -16,7 +16,7 @@ import {
 } from './Charts';
 import { SatelliteHeatmap } from './SatelliteHeatmap';
 import { StatsGrid, TrendInterpretation } from './StatCards';
-import { formatNumber, formatPercent, getRiskBgColor } from '@/lib/utils';
+import { formatNumber, formatPercent } from '@/lib/utils';
 
 // Tab definitions
 const getTabsForOptions = (options: any) => {
@@ -48,16 +48,38 @@ const getTabsForOptions = (options: any) => {
   return tabs;
 };
 
+interface MannKendall {
+  trend: string;
+  p_value: number;
+  tau: number;
+  z_statistic: number;
+}
+
+interface TrendData {
+  slope: number;
+  intercept: number;
+  r_squared: number;
+  p_value: number;
+  per_decade: number;
+  percent_change: number;
+  std_err?: number;
+  sens_slope?: number;
+  sens_per_decade?: number;
+  mann_kendall?: MannKendall;
+  annual_values?: number[];
+  annual_years?: number[];
+}
+
 interface AnalysisTabsProps {
   data: {
     timeSeries?: { times: string[]; values: number[] };
     statistics?: { mean: number; median: number; min: number; max: number; std: number; count: number };
-    trend?: { slope: number; intercept: number; r_squared: number; p_value: number; per_decade: number; percent_change: number };
+    trend?: TrendData;
     climatology?: { months: string[]; values: number[]; std: number[] };
     anomalies?: { years: number[]; values: number[]; z_scores: number[]; anomalies: any[]; threshold: number };
-    forecast?: { dates: string[]; values: number[]; lower: number[]; upper: number[]; trend: string };
+    forecast?: { dates: string[]; values: number[]; lower: number[]; upper: number[]; trend: string; method?: string; change_rate?: number };
     scenarios?: { ssp1: any; ssp2: any; ssp3: any; ssp5: any; baseline: number };
-    impact?: { risk_level: string; risk_score: number; impact_areas: string[]; recommendations: any[] };
+    impact?: { risk_level: string; risk_score: number; impact_areas: string[]; recommendations: any[]; sector_vulnerability: Record<string, number> };
     spatial?: {
       variable_info: { color: string; name: string };
       value_range: { min: number | null; max: number | null };
@@ -114,7 +136,7 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
     };
   }) || [];
 
-  // Annual aggregated data — cleaner for trend / forecast tabs
+  // Annual aggregated data with 11-year centred moving average and OLS trend line
   const annualData = useMemo(() => {
     if (!data.timeSeries) return [];
     const yearMap = new Map<number, number[]>();
@@ -126,18 +148,34 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
         yearMap.get(year)!.push(v);
       }
     });
-    return Array.from(yearMap.entries())
+    const sorted = Array.from(yearMap.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([year, vals]) => {
-        const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-        return {
-          date: year.toString(),
-          value: parseFloat(mean.toFixed(3)),
-          trend: data.trend
-            ? parseFloat((data.trend.intercept + data.trend.slope * year).toFixed(3))
-            : undefined,
-        };
-      });
+      .map(([year, vals]) => ({
+        year,
+        mean: vals.reduce((a, b) => a + b, 0) / vals.length,
+      }));
+
+    return sorted.map((item, idx) => {
+      const trendValue = data.trend
+        ? parseFloat((data.trend.intercept + data.trend.slope * item.year).toFixed(3))
+        : undefined;
+
+      // 11-year centred moving average (±5 years)
+      const half = 5;
+      const start = Math.max(0, idx - half);
+      const end = Math.min(sorted.length - 1, idx + half);
+      const slice = sorted.slice(start, end + 1);
+      const movingAvg = parseFloat(
+        (slice.reduce((s, d) => s + d.mean, 0) / slice.length).toFixed(3)
+      );
+
+      return {
+        date: item.year.toString(),
+        value: parseFloat(item.mean.toFixed(3)),
+        trend: trendValue,
+        movingAvg,
+      };
+    });
   }, [data.timeSeries, data.trend]);
 
   const climatologyData = data.climatology?.months.map((month, i) => ({
@@ -206,7 +244,7 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
         )}
 
         {activeTab === 'trends' && data.trend && (
-          <TrendsTab data={data} variable={variable} timeSeriesData={timeSeriesData} annualData={annualData} />
+          <TrendsTab data={data} variable={variable} annualData={annualData} />
         )}
 
         {activeTab === 'anomalies' && data.anomalies && (
@@ -286,58 +324,100 @@ function DashboardTab({ data, variable, timeSeriesData, climatologyData }: any) 
 }
 
 // Trends Tab
-function TrendsTab({ data, variable, timeSeriesData, annualData }: any) {
+function TrendsTab({ data, variable, annualData }: any) {
+  const trend = data.trend;
+  const mk = trend?.mann_kendall;
+  const pLabel = (p: number) => p < 0.001 ? '< 0.001' : p.toFixed(4);
+
   return (
     <div className="space-y-6">
       <Card className="p-6">
-        <h3 className="font-semibold text-slate-900 dark:text-white mb-2">
+        <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
           📈 Trend Analysis — Annual Means
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-          Annual averages with linear trend (OLS). Monthly data shown in Dashboard tab.
+          Annual means (blue) + 11-year moving average (amber) + OLS linear trend (red dashed).
+          Monthly data is in the Dashboard tab.
         </p>
         <TimeSeriesChart
           data={annualData}
           unit={variable.unit}
           color={variable.color}
           showTrend={true}
+          showMovingAvg={true}
           height={450}
         />
       </Card>
 
       <div className="grid md:grid-cols-2 gap-6">
         <Card className="p-6">
-          <h4 className="font-medium text-slate-900 dark:text-white mb-4">Statistical Summary</h4>
+          <h4 className="font-medium text-slate-900 dark:text-white mb-4">OLS Linear Regression</h4>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Trend per decade</span>
               <span className="font-medium text-slate-900 dark:text-white">
-                {formatNumber(data.trend.per_decade, 3)} {variable.unit}
+                {formatNumber(trend.per_decade, 4)} {variable.unit}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Percent change</span>
               <span className="font-medium text-slate-900 dark:text-white">
-                {formatPercent(data.trend.percent_change)}
+                {formatPercent(trend.percent_change)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500 dark:text-slate-400">R-squared</span>
+              <span className="text-slate-500 dark:text-slate-400">R²</span>
               <span className="font-medium text-slate-900 dark:text-white">
-                {formatNumber(data.trend.r_squared, 3)}
+                {formatNumber(trend.r_squared, 4)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">P-value</span>
               <span className="font-medium text-slate-900 dark:text-white">
-                {data.trend.p_value.toExponential(2)}
+                {pLabel(trend.p_value)}
               </span>
             </div>
+            {trend.sens_per_decade !== undefined && (
+              <>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-3 mt-3">
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-wider">
+                    Sen's Slope (Robust Estimator)
+                  </p>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Sen's slope/decade</span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {formatNumber(trend.sens_per_decade, 4)} {variable.unit}
+                  </span>
+                </div>
+              </>
+            )}
+            {mk && (
+              <>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-3 mt-3">
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-wider">
+                    Mann-Kendall Non-Parametric Test
+                  </p>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Direction</span>
+                  <span className="font-medium capitalize text-slate-900 dark:text-white">{mk.trend}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Kendall's τ</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{formatNumber(mk.tau, 4)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">P-value</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{pLabel(mk.p_value)}</span>
+                </div>
+              </>
+            )}
           </div>
         </Card>
 
         <TrendInterpretation
-          trend={data.trend}
+          trend={trend}
           variableName={variable.name}
           unit={variable.unit}
         />
@@ -514,9 +594,21 @@ function ForecastTab({ data, variable }: any) {
   return (
     <div className="space-y-6">
       <Card className="p-6">
-        <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
-          🔮 Prophet Forecast
+        <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
+          🔮 {data.forecast.method === 'holt_winters_ets'
+            ? 'Holt-Winters ETS Forecast'
+            : data.forecast.method === 'prophet'
+            ? 'Prophet Forecast'
+            : 'Climate Forecast'}
         </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+          Method: {data.forecast.method === 'holt_winters_ets'
+            ? 'Triple Exponential Smoothing (additive trend + seasonal)'
+            : data.forecast.method === 'prophet'
+            ? 'Facebook Prophet (Bayesian structural time series)'
+            : 'Linear extrapolation (fallback)'}
+          {data.forecast.change_rate !== undefined && ` · Change rate: ${formatNumber(data.forecast.change_rate, 2)}%`}
+        </p>
         <ForecastChart
           historicalData={historicalData}
           forecastData={forecastData}
@@ -604,71 +696,260 @@ function ScenariosTab({ data, variable, scenarioData }: any) {
   );
 }
 
+// Sector metadata for impact visualization
+const SECTOR_META: Record<string, { label: string; icon: string; color: string }> = {
+  agriculture:     { label: 'Agriculture',      icon: '🌾', color: '#10b981' },
+  water_resources: { label: 'Water Resources',  icon: '💧', color: '#0ea5e9' },
+  infrastructure:  { label: 'Infrastructure',   icon: '🏗️', color: '#8b5cf6' },
+  biodiversity:    { label: 'Biodiversity',      icon: '🦋', color: '#22c55e' },
+  health:          { label: 'Human Health',      icon: '🏥', color: '#ef4444' },
+};
+
+const RISK_TEXT_COLOR: Record<string, string> = {
+  low:      'text-green-600 dark:text-green-400',
+  moderate: 'text-amber-500 dark:text-amber-400',
+  high:     'text-orange-600 dark:text-orange-400',
+  critical: 'text-red-600 dark:text-red-400',
+};
+
+const RISK_BAR_COLOR: Record<string, string> = {
+  low: '#16a34a', moderate: '#d97706', high: '#ea580c', critical: '#dc2626',
+};
+
+const RISK_CONTEXT: Record<string, string> = {
+  low:      'Current projections suggest manageable impacts with proactive adaptation measures in place.',
+  moderate: 'The region faces moderate climate stress that requires planned, systematic adaptation strategies.',
+  high:     'High-risk conditions demand urgent policy intervention and community-level resilience building.',
+  critical: 'Critical risk levels call for immediate, large-scale adaptation and mitigation efforts.',
+};
+
+function generateImpactNarrative(impact: any, variable: any, region: any, trend: any, stats: any): string {
+  const parts: string[] = [];
+  const varName = variable?.name || 'the variable';
+  const regionName = region?.name || 'this region';
+  const unit = variable?.unit || '';
+  const code = variable?.code || '';
+
+  parts.push(
+    `${regionName} is a ${region?.climateZone || 'Himalayan'} zone ` +
+    `(vulnerability index ${region?.vulnerabilityIndex?.toFixed(1) ?? '–'}/10).`
+  );
+
+  if (stats?.mean !== undefined) {
+    if (['tmp', 'tmx', 'tmn'].includes(code)) {
+      parts.push(
+        `Mean ${varName.toLowerCase()} over the analysis period is ` +
+        `${formatNumber(stats.mean, 2)} ${unit}, ` +
+        `ranging from ${formatNumber(stats.min, 1)} to ${formatNumber(stats.max, 1)} ${unit}.`
+      );
+    } else {
+      parts.push(
+        `Observed ${varName.toLowerCase()} averages ${formatNumber(stats.mean, 2)} ${unit} ` +
+        `(range: ${formatNumber(stats.min, 1)}–${formatNumber(stats.max, 1)} ${unit}).`
+      );
+    }
+  }
+
+  if (trend?.per_decade !== undefined) {
+    const dir = trend.per_decade > 0 ? 'upward' : trend.per_decade < 0 ? 'downward' : 'stable';
+    const sig = trend.p_value < 0.05 ? 'statistically significant' : 'not statistically significant';
+    const pLbl = trend.p_value < 0.001 ? 'p < 0.001' : `p = ${formatNumber(trend.p_value, 4)}`;
+    parts.push(
+      `Trend analysis reveals a ${sig} ${dir} trend of ` +
+      `${formatNumber(Math.abs(trend.per_decade), 4)} ${unit}/decade (${pLbl}, R² = ${formatNumber(trend.r_squared, 3)}).`
+    );
+    if (trend.sens_per_decade !== undefined) {
+      const agree = Math.sign(trend.sens_per_decade) === Math.sign(trend.per_decade);
+      parts.push(
+        `Sen's robust slope (${formatNumber(Math.abs(trend.sens_per_decade), 4)} ${unit}/decade) ` +
+        `${agree ? 'corroborates' : 'partially contradicts'} the OLS estimate.`
+      );
+    }
+  }
+
+  if (trend?.mann_kendall) {
+    const mk = trend.mann_kendall;
+    const mkP = mk.p_value < 0.001 ? 'p < 0.001' : `p = ${formatNumber(mk.p_value, 4)}`;
+    parts.push(
+      `Mann-Kendall non-parametric test confirms: ${mk.trend} (τ = ${formatNumber(mk.tau, 3)}, ${mkP}).`
+    );
+  }
+
+  parts.push(RISK_CONTEXT[impact.risk_level] || '');
+  return parts.filter(Boolean).join(' ');
+}
+
 // Impact Tab
 function ImpactTab({ data, variable, region }: any) {
   const impact = data.impact;
+  const narrative = generateImpactNarrative(impact, variable, region, data.trend, data.statistics);
+
+  const highRecs = impact.recommendations?.filter((r: any) => r.priority === 'high') ?? [];
+  const medRecs  = impact.recommendations?.filter((r: any) => r.priority === 'medium') ?? [];
+  const lowRecs  = impact.recommendations?.filter((r: any) => r.priority === 'low') ?? [];
+
+  const riskBarColor = RISK_BAR_COLOR[impact.risk_level] ?? '#d97706';
+  const riskTextColor = RISK_TEXT_COLOR[impact.risk_level] ?? RISK_TEXT_COLOR.moderate;
 
   return (
     <div className="space-y-6">
-      {/* Risk Overview */}
+      {/* Risk Banner with narrative */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900 dark:text-white">
+          <h3 className="font-bold text-lg text-slate-900 dark:text-white">
             ⚠️ Climate Impact Assessment
           </h3>
-          <Badge className={getRiskBgColor(impact.risk_level)}>
-            {impact.risk_level.toUpperCase()} RISK
-          </Badge>
+          <span className={`text-xl font-extrabold uppercase tracking-wide ${riskTextColor}`}>
+            {impact.risk_level} Risk
+          </span>
         </div>
-        
-        <div className="mb-4">
-          <div className="flex justify-between mb-2">
+
+        <div className="mb-5">
+          <div className="flex justify-between text-sm mb-1.5">
             <span className="text-slate-500 dark:text-slate-400">Overall Risk Score</span>
-            <span className="font-medium text-slate-900 dark:text-white">
+            <span className="font-bold text-slate-900 dark:text-white">
               {formatNumber(impact.risk_score, 1)} / 10
             </span>
           </div>
-          <Progress value={impact.risk_score} max={10} />
+          <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${(impact.risk_score / 10) * 100}%`, backgroundColor: riskBarColor }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-slate-400 mt-1">
+            <span>Low (0–4)</span><span>Moderate (4–6)</span><span>High (6–8)</span><span>Critical (8–10)</span>
+          </div>
         </div>
+
+        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/60 rounded-lg p-4">
+          {narrative}
+        </p>
       </Card>
+
+      {/* Sector Vulnerability Breakdown */}
+      {Object.keys(impact.sector_vulnerability ?? {}).length > 0 && (
+        <Card className="p-6">
+          <h4 className="font-semibold text-slate-900 dark:text-white mb-5">
+            📊 Sector Vulnerability Breakdown
+          </h4>
+          <div className="space-y-4">
+            {Object.entries(impact.sector_vulnerability as Record<string, number>)
+              .sort(([, a], [, b]) => b - a)
+              .map(([sector, score]) => {
+                const meta = SECTOR_META[sector] ?? { label: sector, icon: '📌', color: '#64748b' };
+                return (
+                  <div key={sector}>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <span>{meta.icon}</span>
+                        <span>{meta.label}</span>
+                      </span>
+                      <span className="text-sm font-bold tabular-nums" style={{ color: meta.color }}>
+                        {formatNumber(score, 1)}/10
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${(score / 10) * 100}%`, backgroundColor: meta.color, opacity: 0.85 }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </Card>
+      )}
 
       {/* Impact Areas */}
       {impact.impact_areas?.length > 0 && (
         <Card className="p-6">
-          <h4 className="font-medium text-slate-900 dark:text-white mb-4">Impact Areas</h4>
-          <div className="flex flex-wrap gap-2">
+          <h4 className="font-semibold text-slate-900 dark:text-white mb-4">🎯 Identified Impact Areas</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {impact.impact_areas.map((area: string, i: number) => (
-              <Badge key={i} variant="warning">{area}</Badge>
+              <div
+                key={i}
+                className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg"
+              >
+                <span className="text-amber-500 text-xs mt-1 flex-shrink-0">◆</span>
+                <span className="text-sm text-slate-700 dark:text-slate-300">{area}</span>
+              </div>
             ))}
           </div>
         </Card>
       )}
 
-      {/* Recommendations */}
+      {/* Grouped Recommendations */}
       {impact.recommendations?.length > 0 && (
         <Card className="p-6">
-          <h4 className="font-medium text-slate-900 dark:text-white mb-4">Recommendations</h4>
-          <div className="space-y-3">
-            {impact.recommendations.map((rec: any, i: number) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
-              >
-                <Badge
-                  variant={
-                    rec.priority === 'high' ? 'danger' :
-                    rec.priority === 'medium' ? 'warning' : 'info'
-                  }
-                >
-                  {rec.priority}
-                </Badge>
-                <div>
-                  <p className="text-slate-900 dark:text-white">{rec.action}</p>
-                  <p className="text-sm text-slate-500">{rec.category}</p>
-                </div>
+          <h4 className="font-semibold text-slate-900 dark:text-white mb-5">💡 Adaptation Recommendations</h4>
+
+          {highRecs.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" />
+                <span className="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">
+                  Immediate Priority
+                </span>
               </div>
-            ))}
-          </div>
+              <div className="space-y-2 ml-4">
+                {highRecs.map((rec: any, i: number) => (
+                  <div key={i} className="flex gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-lg">
+                    <span className="text-red-500 font-bold mt-0.5 flex-shrink-0">→</span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{rec.action}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{rec.category}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {medRecs.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0" />
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Medium-term Actions
+                </span>
+              </div>
+              <div className="space-y-2 ml-4">
+                {medRecs.map((rec: any, i: number) => (
+                  <div key={i} className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg">
+                    <span className="text-amber-500 font-bold mt-0.5 flex-shrink-0">→</span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{rec.action}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{rec.category}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {lowRecs.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" />
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  Long-term Planning
+                </span>
+              </div>
+              <div className="space-y-2 ml-4">
+                {lowRecs.map((rec: any, i: number) => (
+                  <div key={i} className="flex gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 rounded-lg">
+                    <span className="text-blue-500 font-bold mt-0.5 flex-shrink-0">→</span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{rec.action}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{rec.category}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
       )}
     </div>

@@ -161,13 +161,22 @@ interface TrendInterpretationProps {
 export function TrendInterpretation({ trend, variableName, unit }: TrendInterpretationProps) {
   const isSignificant = trend.p_value < 0.05;
   const direction = trend.per_decade > 0 ? 'increasing' : trend.per_decade < 0 ? 'decreasing' : 'stable';
-  
+
+  // Confidence: (1 − p). Very small p-values (e.g. 1e-30) must be floored before
+  // computing this — rounding to 6dp in an older backend would have truncated them to 0,
+  // which wrongly shows 100%. Cap bar at 99.5% for visual clarity.
+  const safeP = Math.max(trend.p_value, 1e-15);
+  const confPct = (1 - safeP) * 100;
+  const confBarWidth = Math.min(99.5, confPct);
+  const confLabel = confPct >= 99.9 ? '>99.9%' : `${formatNumber(confPct, 1)}%`;
+  const pLabel = trend.p_value < 0.001 ? '< 0.001' : trend.p_value.toFixed(4);
+
   return (
     <Card className="p-6">
       <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
         📊 Trend Interpretation
       </h3>
-      
+
       <div className="space-y-4">
         <p className="text-slate-600 dark:text-slate-300">
           {variableName} shows a{' '}
@@ -185,22 +194,22 @@ export function TrendInterpretation({ trend, variableName, unit }: TrendInterpre
           </span>{' '}
           per decade ({formatPercent(trend.percent_change)} change).
         </p>
-        
+
         <div className="flex flex-wrap gap-2">
           <Badge variant={isSignificant ? 'success' : 'warning'}>
             {isSignificant ? 'Statistically Significant' : 'Not Significant'}
           </Badge>
           <Badge variant="info">
-            p = {trend.p_value.toFixed(4)}
+            p = {pLabel}
           </Badge>
           <Badge variant="default">
             R² = {formatNumber(trend.r_squared, 3)}
           </Badge>
         </div>
-        
+
         <div className="grid grid-cols-2 gap-4 pt-2">
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Explained Variance</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Explained Variance (R²)</p>
             <div className="mt-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary-500 rounded-full transition-all duration-500"
@@ -212,16 +221,14 @@ export function TrendInterpretation({ trend, variableName, unit }: TrendInterpre
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Confidence Level</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Statistical Confidence (1−p)</p>
             <div className="mt-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                style={{ width: `${(1 - trend.p_value) * 100}%` }}
+                style={{ width: `${confBarWidth}%` }}
               />
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-              {formatNumber((1 - trend.p_value) * 100, 1)}%
-            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{confLabel}</p>
           </div>
         </div>
       </div>

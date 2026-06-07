@@ -149,9 +149,9 @@ export default function HomePage() {
       {/* Sidebar */}
       <Sidebar />
 
-      {/* Main Content — pt-16 clears the fixed header (h ≈ 64px) */}
+      {/* Main Content — pt-20 clears the fixed header (h ≈ 64px) */}
       <main
-        className={`transition-all duration-300 pt-16 ${
+        className={`transition-all duration-300 pt-20 ${
           sidebarOpen ? 'ml-80' : 'ml-0'
         }`}
       >

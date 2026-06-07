@@ -40,10 +40,11 @@ const CustomTooltip = ({ active, payload, label, unit }: any) => {
 
 // Time Series Chart
 interface TimeSeriesChartProps {
-  data: { date: string; value: number; trend?: number }[];
+  data: { date: string; value: number; trend?: number; movingAvg?: number }[];
   unit: string;
   color?: string;
   showTrend?: boolean;
+  showMovingAvg?: boolean;
   loading?: boolean;
   height?: number;
 }
@@ -53,12 +54,16 @@ export function TimeSeriesChart({
   unit,
   color = '#0ea5e9',
   showTrend = true,
+  showMovingAvg = false,
   loading = false,
   height = 400,
 }: TimeSeriesChartProps) {
   if (loading) {
     return <Skeleton className={`w-full h-[${height}px]`} />;
   }
+
+  const hasTrend = showTrend && data.some(d => d.trend !== undefined);
+  const hasMovingAvg = showMovingAvg && data.some(d => d.movingAvg !== undefined);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -84,21 +89,33 @@ export function TimeSeriesChart({
           type="monotone"
           dataKey="value"
           stroke={color}
-          strokeWidth={showTrend && data[0]?.trend !== undefined ? 1.5 : 2}
-          strokeOpacity={showTrend && data[0]?.trend !== undefined ? 0.7 : 1}
+          strokeWidth={hasTrend ? 1.5 : 2}
+          strokeOpacity={hasTrend ? 0.65 : 1}
           dot={false}
-          name="Observed"
+          name="Annual Mean"
           activeDot={{ r: 4, fill: color }}
         />
-        {showTrend && data[0]?.trend !== undefined && (
+        {hasMovingAvg && (
+          <Line
+            type="monotone"
+            dataKey="movingAvg"
+            stroke="#f59e0b"
+            strokeWidth={2.5}
+            dot={false}
+            name="11-yr Smooth"
+            activeDot={false}
+            strokeOpacity={0.95}
+          />
+        )}
+        {hasTrend && (
           <Line
             type="linear"
             dataKey="trend"
             stroke="#f43f5e"
-            strokeWidth={3}
-            strokeDasharray="8 4"
+            strokeWidth={2.5}
+            strokeDasharray="10 4"
             dot={false}
-            name="Trend (OLS)"
+            name="OLS Trend"
             activeDot={false}
           />
         )}
