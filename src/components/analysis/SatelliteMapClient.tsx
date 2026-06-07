@@ -1,28 +1,10 @@
 'use client';
 
-// Leaflet CSS is safe here — this file is only ever loaded client-side
-// because SatelliteHeatmap.tsx wraps it with dynamic(..., { ssr: false })
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import React, { useEffect, useRef } from 'react';
 
-// ─── region metadata (mirrors backend Config.REGIONS exactly) ───────────────
-const REGION_META: Record<string, {
-  north: number; south: number; east: number; west: number;
-  name: string; zone: string; elevation: string; climate: string; color: string;
-}> = {
-  E2000: { north: 28.0, south: 27.0, east: 89.0, west: 88.0, name: 'Eastern Valleys',  zone: 'Eastern', elevation: '1000–2000 m', climate: 'Subtropical',    color: '#FF6B6B' },
-  E4000: { north: 28.3, south: 27.3, east: 88.8, west: 87.8, name: 'Eastern Hills',    zone: 'Eastern', elevation: '2000–4000 m', climate: 'Temperate',       color: '#FF5722' },
-  E6000: { north: 28.5, south: 27.5, east: 88.5, west: 87.5, name: 'Eastern Peaks',    zone: 'Eastern', elevation: '4000–6000 m', climate: 'Alpine',          color: '#FF3D00' },
-  C2000: { north: 28.5, south: 27.5, east: 85.0, west: 84.0, name: 'Central Valleys',  zone: 'Central', elevation: '1000–2000 m', climate: 'Subtropical',    color: '#4CAF50' },
-  C4000: { north: 28.8, south: 27.8, east: 84.8, west: 83.8, name: 'Central Hills',    zone: 'Central', elevation: '2000–4000 m', climate: 'Temperate',       color: '#388E3C' },
-  C6000: { north: 29.0, south: 28.0, east: 84.5, west: 83.5, name: 'Central Peaks',    zone: 'Central', elevation: '4000–6000 m', climate: 'Alpine',          color: '#2E7D32' },
-  W2000: { north: 32.5, south: 31.5, east: 77.5, west: 76.5, name: 'Western Valleys',  zone: 'Western', elevation: '1000–2000 m', climate: 'Arid Subtropical', color: '#2196F3' },
-  W4000: { north: 32.8, south: 31.8, east: 77.3, west: 76.3, name: 'Western Hills',    zone: 'Western', elevation: '2000–4000 m', climate: 'Temperate Arid',  color: '#1976D2' },
-  W6000: { north: 33.0, south: 32.0, east: 77.0, west: 76.0, name: 'Western Peaks',    zone: 'Western', elevation: '4000–6000 m', climate: 'Cold Desert',     color: '#1565C0' },
-};
-
-// ─── RdYlBu_r colour scale (blue → yellow → red) ────────────────────────────
+// ─── colour scale (RdYlBu_r) ────────────────────────────────────────────────
 const COLOR_STOPS = [
   [49,  54,  149],
   [69,  117, 180],
@@ -37,7 +19,7 @@ const COLOR_STOPS = [
 
 function valueToColor(value: number, min: number, max: number): string {
   if (max === min) return 'rgba(128,128,128,0.6)';
-  const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const t   = Math.max(0, Math.min(1, (value - min) / (max - min)));
   const seg = t * (COLOR_STOPS.length - 1);
   const lo  = Math.floor(seg);
   const hi  = Math.min(lo + 1, COLOR_STOPS.length - 1);
@@ -49,11 +31,17 @@ function valueToColor(value: number, min: number, max: number): string {
 }
 
 function cssGradient(): string {
-  const pct = COLOR_STOPS.map((s, i) =>
+  return COLOR_STOPS.map((s, i) =>
     `rgb(${s[0]},${s[1]},${s[2]}) ${Math.round((i / (COLOR_STOPS.length - 1)) * 100)}%`
   ).join(', ');
-  return `linear-gradient(to right, ${pct})`;
 }
+
+// ─── zone colour palette (matches shapefile colors) ─────────────────────────
+const ZONE_COLORS: Record<string, string> = {
+  Central: '#27ae60',
+  Eastern: '#2980b9',
+  Western: '#e74c3c',
+};
 
 // ─── props ──────────────────────────────────────────────────────────────────
 export interface SatelliteMapClientProps {
@@ -83,22 +71,19 @@ export default function SatelliteMapClient({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Tear down any previous instance (React strict-mode fires effects twice)
     if (mapRef.current) {
       mapRef.current.remove();
       mapRef.current = null;
     }
 
-    // ── compute actual min/max from the grid, not region averages ────────────
+    // ── compute actual min/max from the grid values ──────────────────────────
     let dataMin = Infinity, dataMax = -Infinity;
-    for (const row of values) {
-      for (const v of row) {
+    for (const row of values)
+      for (const v of row)
         if (v !== null && v !== undefined) {
           if (v < dataMin) dataMin = v;
           if (v > dataMax) dataMax = v;
         }
-      }
-    }
     if (!isFinite(dataMin)) { dataMin = 0; dataMax = 1; }
 
     // ── initialise map ───────────────────────────────────────────────────────
@@ -109,7 +94,6 @@ export default function SatelliteMapClient({
     });
     mapRef.current = map;
 
-    // Fit to Himalayan domain (matches backend clip bounds)
     map.fitBounds([[24, 68], [36, 92]], { padding: [10, 10] });
 
     // ESRI satellite base
@@ -124,15 +108,13 @@ export default function SatelliteMapClient({
       { maxZoom: 18, opacity: 0.75 }
     ).addTo(map);
 
-    // ── draw CRU 0.5° grid cells ─────────────────────────────────────────────
+    // ── draw CRU 0.5° climate grid ───────────────────────────────────────────
     const cellHalf = lats.length > 1 ? Math.abs(lats[1] - lats[0]) / 2 : 0.25;
-
     for (let r = 0; r < lats.length; r++) {
       for (let c = 0; c < lons.length; c++) {
         const v = values[r]?.[c];
         if (v === null || v === undefined) continue;
         const lat = lats[r], lon = lons[c];
-
         L.rectangle(
           [[lat - cellHalf, lon - cellHalf], [lat + cellHalf, lon + cellHalf]],
           { color: 'none', fillColor: valueToColor(v, dataMin, dataMax), fillOpacity: 0.70, weight: 0 }
@@ -146,92 +128,139 @@ export default function SatelliteMapClient({
       }
     }
 
-    // ── draw study region boundaries ─────────────────────────────────────────
-    for (const [code, meta] of Object.entries(REGION_META)) {
-      const isSelected = code === selectedRegion;
-      const apiRegion  = regions?.[code];
-      const val        = apiRegion?.value;
+    // ── load shapefile boundaries as GeoJSON ─────────────────────────────────
+    fetch('/geojson/all_regions.geojson')
+      .then(r => r.json())
+      .then((geojson: GeoJSON.FeatureCollection) => {
+        if (!mapRef.current) return;
 
-      const tooltipHtml =
-        `<div style="font-family:system-ui;min-width:140px">` +
-        `<div style="font-weight:700;font-size:12px;color:${meta.color};margin-bottom:4px">${code} — ${meta.name}</div>` +
-        `<div style="font-size:11px;color:#444;line-height:1.6">` +
-        `Zone: <b>${meta.zone}</b><br/>` +
-        `Elevation: <b>${meta.elevation}</b><br/>` +
-        `Climate: <b>${meta.climate}</b><br/>` +
-        (val !== null && val !== undefined
-          ? `Mean: <b>${val.toFixed(2)} ${unit}</b>`
-          : '') +
-        `</div></div>`;
+        L.geoJSON(geojson, {
+          style: (feature) => {
+            const props  = feature?.properties ?? {};
+            const code   = props.region_code as string;
+            const zone   = props.zone as string;
+            const isSel  = code === selectedRegion;
+            const color  = ZONE_COLORS[zone] ?? '#ffffff';
+            return {
+              color:       isSel ? '#FFD700' : color,
+              weight:      isSel ? 3          : 2,
+              opacity:     1,
+              fillOpacity: isSel ? 0.10       : 0.05,
+              fillColor:   isSel ? '#FFD700'  : color,
+              dashArray:   isSel ? undefined  : '6 4',
+            };
+          },
+          onEachFeature: (feature, layer) => {
+            const props     = feature.properties ?? {};
+            const code      = props.region_code as string;
+            const apiRegion = regions?.[code];
+            const val       = apiRegion?.value;
+            const zone      = props.zone as string;
+            const zoneColor = ZONE_COLORS[zone] ?? '#888';
 
-      L.rectangle(
-        [[meta.south, meta.west], [meta.north, meta.east]],
-        {
-          color:     isSelected ? '#FFD700' : '#ffffff',
-          weight:    isSelected ? 3 : 1.5,
-          fillOpacity: 0,
-          dashArray: isSelected ? undefined : '6 4',
-        }
-      )
-        .bindTooltip(tooltipHtml, { direction: 'top', sticky: false, className: 'him-region-tip' })
-        .addTo(map);
+            const popupHtml =
+              `<div style="font-family:system-ui;min-width:160px">` +
+              `<div style="font-weight:700;font-size:13px;color:${zoneColor};margin-bottom:6px">` +
+              `  ${code} — ${props.area_name}` +
+              `</div>` +
+              `<table style="font-size:11px;color:#444;border-collapse:collapse;width:100%">` +
+              `  <tr><td style="padding:2px 6px 2px 0;color:#888">Zone</td>` +
+              `      <td><b>${zone}</b></td></tr>` +
+              `  <tr><td style="padding:2px 6px 2px 0;color:#888">Elevation</td>` +
+              `      <td><b>${props.elevation_range}</b></td></tr>` +
+              `  <tr><td style="padding:2px 6px 2px 0;color:#888">Climate</td>` +
+              `      <td><b>${apiRegion?.climate_zone ?? '—'}</b></td></tr>` +
+              (val !== null && val !== undefined
+                ? `  <tr><td style="padding:2px 6px 2px 0;color:#888">Mean</td>` +
+                  `      <td><b>${val.toFixed(2)} ${unit}</b></td></tr>`
+                : '') +
+              `</table></div>`;
 
-      // Code label in the centre of each box
-      const centerLat = (meta.south + meta.north) / 2;
-      const centerLon = (meta.west  + meta.east)  / 2;
-      L.marker([centerLat, centerLon], {
-        icon: L.divIcon({
-          className: '',
-          html: `<span style="
-            background:rgba(0,0,0,0.55);color:${isSelected ? '#FFD700' : '#fff'};
-            font-size:9px;font-weight:700;font-family:monospace;
-            padding:1px 4px;border-radius:3px;white-space:nowrap;
-            border:${isSelected ? '1px solid #FFD700' : 'none'};
-          ">${code}</span>`,
-          iconAnchor: [16, 8],
-        }),
-        interactive: false,
-      }).addTo(map);
-    }
+            layer.bindPopup(popupHtml, { className: 'him-popup', maxWidth: 220 });
 
-    // ── colour legend ─────────────────────────────────────────────────────────
+            // Permanent code label at centroid
+            const centLat = props.centroid_lat as number;
+            const centLon = props.centroid_lon as number;
+            if (centLat && centLon && mapRef.current) {
+              const isSel = code === selectedRegion;
+              L.marker([centLat, centLon], {
+                icon: L.divIcon({
+                  className: '',
+                  html: `<span style="
+                    background:rgba(0,0,0,0.60);
+                    color:${isSel ? '#FFD700' : '#fff'};
+                    font-size:10px;font-weight:700;font-family:monospace;
+                    padding:2px 5px;border-radius:3px;white-space:nowrap;
+                    border:1px solid ${isSel ? '#FFD700' : 'rgba(255,255,255,0.3)'};
+                    pointer-events:none;
+                  ">${code}</span>`,
+                  iconAnchor: [18, 9],
+                }),
+                interactive: false,
+              }).addTo(mapRef.current);
+            }
+          },
+        }).addTo(map);
+      })
+      .catch(() => {
+        // GeoJSON failed to load — map still works with CRU grid
+      });
+
+    // ── colour legend (bottom-right) ─────────────────────────────────────────
     const legend = new L.Control({ position: 'bottomright' });
     legend.onAdd = () => {
       const div = L.DomUtil.create('div');
-      const tRange = timeRange
-        ? `<div style="color:#666;font-size:9px;margin-bottom:4px">
-             ${timeRange.start?.slice(0,4) ?? ''} – ${timeRange.end?.slice(0,4) ?? ''}
-           </div>`
-        : '';
-      div.innerHTML = `
-        <div style="background:rgba(255,255,255,0.92);padding:8px 10px;
-                    border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);
-                    font-family:system-ui;min-width:160px">
-          ${tRange}
-          <div style="font-weight:600;font-size:11px;margin-bottom:5px">
-            ${variableName ?? 'Value'} (${unit})
-          </div>
-          <div style="height:12px;border-radius:4px;background:${cssGradient()}"></div>
-          <div style="display:flex;justify-content:space-between;font-size:10px;
-                      color:#555;margin-top:3px">
-            <span>${dataMin.toFixed(1)}</span>
-            <span>${((dataMin + dataMax) / 2).toFixed(1)}</span>
-            <span>${dataMax.toFixed(1)}</span>
-          </div>
-        </div>`;
+      const yr = timeRange
+        ? `<div style="color:#888;font-size:9px;margin-bottom:3px">` +
+          `${timeRange.start?.slice(0,4) ?? ''} – ${timeRange.end?.slice(0,4) ?? ''}` +
+          `</div>` : '';
+      div.innerHTML =
+        `<div style="background:rgba(255,255,255,0.93);padding:8px 10px;border-radius:8px;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.25);font-family:system-ui;min-width:165px">` +
+          `${yr}` +
+          `<div style="font-weight:600;font-size:11px;margin-bottom:5px">` +
+          `  ${variableName ?? 'Value'} (${unit})` +
+          `</div>` +
+          `<div style="height:12px;border-radius:4px;background:linear-gradient(to right,${cssGradient()})"></div>` +
+          `<div style="display:flex;justify-content:space-between;font-size:10px;color:#555;margin-top:3px">` +
+          `  <span>${dataMin.toFixed(1)}</span>` +
+          `  <span>${((dataMin+dataMax)/2).toFixed(1)}</span>` +
+          `  <span>${dataMax.toFixed(1)}</span>` +
+          `</div>` +
+        `</div>`;
       L.DomEvent.disableClickPropagation(div);
       return div;
     };
     legend.addTo(map);
 
+    // ── shapefile zone legend (top-right) ─────────────────────────────────────
+    const zoneLegend = new L.Control({ position: 'topright' });
+    zoneLegend.onAdd = () => {
+      const div = L.DomUtil.create('div');
+      div.innerHTML =
+        `<div style="background:rgba(255,255,255,0.93);padding:8px 10px;border-radius:8px;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.25);font-family:system-ui">` +
+          `<div style="font-weight:600;font-size:11px;margin-bottom:5px">Study Regions</div>` +
+          Object.entries(ZONE_COLORS).map(([zone, color]) =>
+            `<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:3px">` +
+            `  <div style="width:12px;height:12px;border-radius:2px;background:${color};opacity:0.85"></div>` +
+            `  <span style="color:#333">${zone} Himalaya</span>` +
+            `</div>`
+          ).join('') +
+          `<div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee;font-size:10px;color:#888">` +
+          `  Click region for details` +
+          `</div>` +
+        `</div>`;
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    };
+    zoneLegend.addTo(map);
+
     // ── scale bar ─────────────────────────────────────────────────────────────
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
     return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
   }, [lats, lons, values, unit, variableName, selectedRegion, regions, timeRange]);
 
@@ -248,14 +277,13 @@ export default function SatelliteMapClient({
           box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
         }
         .him-tip::before { display:none !important; }
-        .him-region-tip {
-          background: #fff !important;
-          border: none !important;
-          box-shadow: 0 3px 12px rgba(0,0,0,0.25) !important;
-          border-radius: 8px !important;
-          padding: 8px 10px !important;
+        .him-popup .leaflet-popup-content-wrapper {
+          border-radius: 10px !important;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.2) !important;
+          padding: 0 !important;
         }
-        .him-region-tip::before { display:none !important; }
+        .him-popup .leaflet-popup-content { margin: 10px 12px !important; }
+        .him-popup .leaflet-popup-tip-container { display: none !important; }
         .leaflet-control-attribution { font-size: 9px !important; }
       `}</style>
       <div
