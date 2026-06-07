@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useDashboardStore } from '@/lib/store';
 import { VARIABLES, REGIONS, MONTHS } from '@/lib/constants';
@@ -70,15 +70,21 @@ interface AnalysisTabsProps {
 }
 
 export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
-  const { 
-    selectedVariable, 
-    selectedRegion, 
-    startYear, 
+  const {
+    selectedVariable,
+    selectedRegion,
+    startYear,
     endYear,
     analysisOptions,
     activeTab,
-    setActiveTab 
+    setActiveTab,
+    analysisResult,
   } = useDashboardStore();
+
+  // Use the year range that was actually analysed (stored in analysisResult, not persisted)
+  // Falls back to store values only if analysisResult is not yet available
+  const displayStartYear = analysisResult?.startYear ?? startYear;
+  const displayEndYear   = analysisResult?.endYear   ?? endYear;
 
   const variable = VARIABLES[selectedVariable];
   const region = REGIONS[selectedRegion];
@@ -95,11 +101,11 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
     );
   }
 
-  // Prepare chart data
+  // Monthly chart data (with trend overlay per point)
   const timeSeriesData = data.timeSeries?.times.map((time, i) => {
     const year = new Date(time).getFullYear();
-    const trendValue = data.trend 
-      ? data.trend.intercept + data.trend.slope * year 
+    const trendValue = data.trend
+      ? data.trend.intercept + data.trend.slope * year
       : undefined;
     return {
       date: new Date(time).toLocaleDateString('en-US', { year: 'numeric', month: 'short' }),
@@ -107,6 +113,32 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
       trend: trendValue,
     };
   }) || [];
+
+  // Annual aggregated data — cleaner for trend / forecast tabs
+  const annualData = useMemo(() => {
+    if (!data.timeSeries) return [];
+    const yearMap = new Map<number, number[]>();
+    data.timeSeries.times.forEach((time, i) => {
+      const year = new Date(time).getFullYear();
+      const v = data.timeSeries!.values[i];
+      if (v !== null && v !== undefined && !isNaN(v)) {
+        if (!yearMap.has(year)) yearMap.set(year, []);
+        yearMap.get(year)!.push(v);
+      }
+    });
+    return Array.from(yearMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([year, vals]) => {
+        const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+        return {
+          date: year.toString(),
+          value: parseFloat(mean.toFixed(3)),
+          trend: data.trend
+            ? parseFloat((data.trend.intercept + data.trend.slope * year).toFixed(3))
+            : undefined,
+        };
+      });
+  }, [data.timeSeries, data.trend]);
 
   const climatologyData = data.climatology?.months.map((month, i) => ({
     month,
@@ -141,7 +173,7 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
             {variable?.icon} {variable?.name} Analysis
           </h1>
           <p className="text-slate-500 dark:text-slate-400">
-            {region?.icon} {region?.name} • {startYear} - {endYear}
+            {region?.icon} {region?.name} • {displayStartYear} – {displayEndYear}
           </p>
         </div>
         <div className="flex gap-2">
@@ -174,7 +206,7 @@ export function AnalysisTabs({ data, loading = false }: AnalysisTabsProps) {
         )}
 
         {activeTab === 'trends' && data.trend && (
-          <TrendsTab data={data} variable={variable} timeSeriesData={timeSeriesData} />
+          <TrendsTab data={data} variable={variable} timeSeriesData={timeSeriesData} annualData={annualData} />
         )}
 
         {activeTab === 'anomalies' && data.anomalies && (
@@ -254,15 +286,18 @@ function DashboardTab({ data, variable, timeSeriesData, climatologyData }: any) 
 }
 
 // Trends Tab
-function TrendsTab({ data, variable, timeSeriesData }: any) {
+function TrendsTab({ data, variable, timeSeriesData, annualData }: any) {
   return (
     <div className="space-y-6">
       <Card className="p-6">
-        <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
-          📈 Trend Analysis
+        <h3 className="font-semibold text-slate-900 dark:text-white mb-2">
+          📈 Trend Analysis — Annual Means
         </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+          Annual averages with linear trend (OLS). Monthly data shown in Dashboard tab.
+        </p>
         <TimeSeriesChart
-          data={timeSeriesData}
+          data={annualData}
           unit={variable.unit}
           color={variable.color}
           showTrend={true}

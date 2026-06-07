@@ -84,20 +84,22 @@ export function TimeSeriesChart({
           type="monotone"
           dataKey="value"
           stroke={color}
-          strokeWidth={2}
+          strokeWidth={showTrend && data[0]?.trend !== undefined ? 1.5 : 2}
+          strokeOpacity={showTrend && data[0]?.trend !== undefined ? 0.7 : 1}
           dot={false}
           name="Observed"
           activeDot={{ r: 4, fill: color }}
         />
         {showTrend && data[0]?.trend !== undefined && (
           <Line
-            type="monotone"
+            type="linear"
             dataKey="trend"
-            stroke="#ef4444"
-            strokeWidth={2}
-            strokeDasharray="5 5"
+            stroke="#f43f5e"
+            strokeWidth={3}
+            strokeDasharray="8 4"
             dot={false}
-            name="Trend"
+            name="Trend (OLS)"
+            activeDot={false}
           />
         )}
       </ComposedChart>
